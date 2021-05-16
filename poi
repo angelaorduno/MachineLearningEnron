@@ -1,0 +1,198 @@
+#!/usr/bin/python
+
+import sys
+import pickle
+sys.path.append("C:/Users/Angela")
+
+from feature_format import featureFormat, targetFeatureSplit
+from tester import dump_classifier_and_data
+
+import pandas as pd
+import numpy as np
+%matplotlib inline
+import matplotlib.pyplot
+from matplotlib import pyplot
+from sklearn.feature_selection import SelectKBest
+from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.svm import SVC
+from sklearn.model_selection import GridSearchCV
+from pandas.plotting import scatter_matrix
+
+### Task 1: Select what features you'll use.
+### features_list is a list of strings, each of which is a feature name.
+### The first feature must be "poi".
+features_list = ['poi', 'bonus', 'deferred_income', 'exercised_stock_options', 'expenses', 'from_messages', 'from_poi_to_this_person', 'from_this_person_to_poi', 'long_term_incentive', 'other', 'restricted_stock', 'salary', 'shared_receipt_with_poi', 'to_messages', 'total_payments', 'total_stock_value'] # You will need to use more features
+
+### Load the dictionary containing the dataset
+with open("C:/Users/Angela/final_project/final_project_dataset.pkl", "r") as data_file:
+    data_dict = pickle.load(data_file)
+
+
+financial_features = ['salary', 'deferral_payments', 'total_payments', 'loan_advances', 'bonus', 'restricted_stock_deferred', 'deferred_income', 'total_stock_value',
+'expenses', 'exercised_stock_options', 'other', 'long_term_incentive', 'restricted_stock', 'director_fees']
+email_features = ['to_messages', 'email_address', 'from_poi_to_this_person', 'from_messages', 'from_this_person_to_poi', 'shared_receipt_with_poi']
+POI_label = ['poi']
+total_features = POI_label + financial_features + email_features
+
+# create a dataframe from  data_dict
+df = pd.DataFrame.from_dict(data_dict)
+
+# Total number of data points
+# Number of features
+df.shape
+
+# Allocation across classes (POI/non-POI)
+### switch rows and cols
+df = df.transpose()
+### drop email as it is non numerical data
+df = df.drop(columns=['email_address'])
+### convert string date to float numbers
+df = df.astype(float)
+### fill NaN with 0
+df = df.fillna(0)
+### descriptions
+display(df.describe().round(2))
+### Univariate
+### box and whisker plots
+df.plot(kind = 'box', subplots=True, layout=(5, 4), sharex = False, sharey = False)
+pyplot.show()
+### histograms
+df.hist()
+pyplot.show()
+### Multivariate
+### scatter plot matrix
+scatter_matrix(df)
+pyplot.show()
+
+
+# Features with missing values
+missing_val = {'key':['value']}
+for feature in total_features:
+    missing_val[feature] = 0
+for employee in data_dict:
+    for feature in data_dict[employee]:
+        if data_dict[employee][feature] == 'NaN':
+            missing_val[feature] += 1
+
+    
+missing_valDF = pd.DataFrame(missing_val)
+missing_valDF = missing_valDF.drop(columns=['key'])
+missing_valDF = missing_valDF.transpose()
+missing_valDF.columns = ['Missing Value']
+display(missing_valDF.sort_values(by = ['Missing Value'], ascending = True))
+
+
+df = df.drop(columns=['loan_advances', 'director_fees', 'restricted_stock_deferred', 'deferral_payments'])
+
+### Task 2: Remove outliers
+from feature_format import featureFormat, targetFeatureSplit
+outlierfeatures = ["salary", "total_stock_value"]
+outlierdata = featureFormat(data_dict, outlierfeatures)
+max_data_point = outlierdata.max()
+
+for point in outlierdata:
+    salary = point[0]
+    total_stock_value = point[1]
+    matplotlib.pyplot.scatter(salary, total_stock_value)
+    
+matplotlib.pyplot.xlabel("salary")
+matplotlib.pyplot.ylabel("total_stock_value")
+matplotlib.pyplot.show()
+maxoutlier = max_data_point
+
+for key, value in data_dict.iteritems():
+    if value['total_stock_value'] == maxoutlier:
+        print "The max data point {} belongs to the outlier {}".format(outlierdata.max(), key)
+        
+data_dict.pop('TOTAL',0)
+ 
+data_dict.pop('THE TRAVEL AGENCY IN THE PARK',0)
+ 
+df['ratio_salary_total_payments'] = ((df['total_payments'] - df['salary']) / df['total_payments'])
+ 
+display(df.head(5))
+
+data_dict = df.to_dict()
+
+### Task 3: Create new feature(s)
+### Store to my_dataset for easy export below.
+my_dataset = data_dict
+
+### Extract features and labels from dataset for local testing
+data = featureFormat(my_dataset, features_list, sort_keys = True)
+labels, features = targetFeatureSplit(data)
+
+features_list = ['poi', 'bonus', 'deferred_income', 'exercised_stock_options', 'expenses', 'from_messages', 'from_poi_to_this_person', 'from_this_person_to_poi', 'long_term_incentive', 'other', 'restricted_stock', 'salary', 'shared_receipt_with_poi', 'to_messages', 'total_payments', 'total_stock_value', 'ratio_salary_total_payments'] # You will need to use more features
+
+# Compare the new feature using SelectKBest or feature importance scores of new features with the other features.
+
+def selectFeatures(nParam):
+    kBest = SelectKBest(k = nParam)
+    kBest.fit_transform(features, labels)
+    kResult = zip(kBest.get_support(), kBest.scores_, features_list[1:])
+    return list(sorted(kResult, key = lambda x: x[1], reverse = True))
+
+
+results = selectFeatures('all')
+
+for trueFalse, score, feature in results:
+    if trueFalse:
+        print  feature, " : ", score
+        
+        
+### Task 4: Try a varity of classifiers
+### Please name your classifier clf for easy export below.
+### Note that if you want to do PCA or other multi-stage operations,
+### you'll need to use Pipelines. For more info:
+### http://scikit-learn.org/stable/modules/pipeline.html
+features_train, features_test, labels_train, labels_test = train_test_split(features, labels, test_size=0.20, random_state=1)
+
+# Provided to give you a starting point. Try a variety of classifiers.
+from sklearn.naive_bayes import GaussianNB
+clf = GaussianNB()
+clf.fit(features_train, labels_train)
+accuracy = clf.score(features_test, labels_test)
+
+print "The accuracy rate for GaussianNB is {}\n".format(accuracy)
+
+
+
+# Spot Check Algorithms
+models = []
+models.append(('DT', DecisionTreeClassifier()))
+models.append(('NB', GaussianNB()))
+models.append(('SVM', SVC(gamma='auto')))
+
+# evaluate each model in turn
+results = []
+names = []
+for name, model in models:
+    kfold = StratifiedKFold(n_splits = 10, random_stat = 1, shuffle = True)
+    cv_results = cross_val_score(model, features_train, labels_train, cv = kfold, scoring = 'accuracy')
+    results.append(cv_results)
+    names.append(name)
+
+print('%s: %f (%f)' % (name, cv_results.mean(), cv_results.std()))
+
+
+### Task 5: Tune your classifier to achieve better than .3 precision and recall 
+### using our testing script. Check the tester.py script in the final project
+### folder for details on the evaluation method, especially the test_classifier
+### function. Because of the small size of the dataset, the script uses
+### stratified shuffle split cross validation. For more info: 
+### http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
+
+# Example starting point. Try investigating other evaluation techniques!
+from sklearn.cross_validation import train_test_split
+features_train, features_test, labels_train, labels_test = \
+    train_test_split(features, labels, test_size=0.3, random_state=42)
+    
+    
+### Task 6: Dump your classifier, dataset, and features_list so anyone can
+### check your results. You do not need to change anything below, but make sure
+### that the version of poi_id.py that you submit can be run on its own and
+### generates the necessary .pkl files for validating your results.
+
+dump_classifier_and_data(clf, my_dataset, features_list)    
